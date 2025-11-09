@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Patientvejleder · Type 1-diabetes (AI agent)</title>
+  <style>
+    :root{ --bg:#0b1020; --card:#111734; --ink:#eaf2ff; --muted:#b8c6e3; --accent:#7cc4ff; --accent2:#9ae6b4; --danger:#ffb4b4; --shadow:0 10px 30px rgba(0,0,0,.35); }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(120deg,#0a0f1f,#121b3b 60%,#0a1533);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--ink)}
+    header{position:sticky;top:0;z-index:5;background:rgba(8,12,28,.7);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.06)}
+    .wrap{max-width:1100px;margin:0 auto;padding:20px}
+    .title{display:flex;gap:14px;align-items:center}
+    .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#5aa0ff,#7ce0ce);box-shadow:var(--shadow)}
+    h1{font-size:20px;margin:0}
+    main{max-width:1100px;margin:20px auto;display:grid;grid-template-columns:1.1fr .9fr;gap:20px;padding:0 20px}
+    @media (max-width: 900px){ main{display:block} }
+    .card{background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:var(--shadow)}
+    .card .in{padding:18px}
+    .muted{color:var(--muted)}
+    .input{width:100%;min-height:90px;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:#0e1532;color:var(--ink);padding:14px}
+    .row{display:flex;flex-wrap:wrap;gap:8px}
+    .chip{border:1px solid rgba(255,255,255,.14);background:#0f1738;color:var(--ink);padding:8px 12px;border-radius:999px;cursor:pointer}
+    .chip.active{background:linear-gradient(135deg,#3758ff33,#3ee4c633);border-color:#7cc4ff}
+    .btn{appearance:none;border:none;background:linear-gradient(135deg,#5aa0ff,#7ce0ce);color:#051022;padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer;box-shadow:0 6px 18px rgba(55,140,255,.25)}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .results{display:grid;gap:12px}
+    .result{border:1px dashed rgba(255,255,255,.15);border-radius:14px;padding:12px 14px}
+    .result h3{margin:0 0 6px;font-size:17px}
+    .tag{display:inline-block;margin-right:6px;margin-top:6px;padding:4px 8px;border-radius:999px;background:rgba(124,196,255,.18);color:#cfe8ff;border:1px solid rgba(124,196,255,.4);font-size:12px}
+    .why{font-size:12px;color:#c8d6f8}
+    .why b{color:#fff}
+    .bar{display:flex;gap:10px;align-items:center;justify-content:space-between}
+    .small{font-size:12px}
+    .link{display:inline-flex;gap:8px;align-items:center;text-decoration:none;color:#051022;background:var(--accent);padding:7px 10px;border-radius:10px;font-weight:700}
+    .link:hover{filter:brightness(1.05)}
+    .filters{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .switch{display:inline-flex;align-items:center;gap:8px;background:#0e1532;border:1px solid rgba(255,255,255,.12);padding:7px 10px;border-radius:12px}
+    .switch input{accent-color:#5aa0ff}
+    footer{opacity:.75}
+    .hint{font-size:12px;color:#cbd6f4}
+    .err{color:#ffdddd;background:#5a1f1f;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap title">
+      <div class="logo" aria-hidden="true"></div>
+      <h1>Patientvejleder · Type 1-diabetes</h1>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="in">
+        <div class="bar">
+          <h2 style="margin:0;font-size:18px">Hvad vil du have hjælp til?</h2>
+          <button id="suggestBtn" class="btn">Foreslå vejledninger</button>
+        </div>
+        <p class="muted small" style="margin-top:8px">Skriv med dine egne ord – du kan også klikke på forslag nedenfor.</p>
+        <textarea id="problem" class="input" placeholder="fx: hypo efter træning, sensor-klæber irriterer huden, eller upload fra pumpen?"></textarea>
+
+        <div class="hint" style="margin-top:10px">Hurtigvalg</div>
+        <div class="row" id="chips"></div>
+
+        <div class="filters">
+          <label class="switch"><input type="checkbox" id="catAkut" checked> Akut</label>
+          <label class="switch"><input type="checkbox" id="catTek" checked> Teknologi</label>
+          <label class="switch"><input type="checkbox" id="catLiv" checked> Rejse & hverdagsliv</label>
+          <label class="switch"><input type="checkbox" id="catFore" checked> Screening & forebyggelse</label>
+        </div>
+        <div id="errorBox" class="err" style="display:none"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="in">
+        <h2 style="margin-top:0;font-size:18px">Foreslåede vejledninger</h2>
+        <div id="results" class="results"></div>
+        <hr style="border-color:rgba(255,255,255,.08)">
+        <h3 style="font-size:16px;margin-bottom:6px">Hvornår skal du kontakte klinikken / akut?</h3>
+        <ul class="muted">
+          <li>Gentagne svære hypoglykæmier eller bevidstløshed</li>
+          <li>Vedvarende ketoner/forværring trods ekstra insulin og væske</li>
+          <li>Sår på fødder, rødme/varme eller tegn på infektion</li>
+          <li>Synsforværring, stærke smerter i øjne eller hovedpine</li>
+          <li>Meget højt blodtryk eller markant utilpashed</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <div class="wrap">
+    <footer class="muted small" style="margin:30px 0 60px">Denne side foreslår vejledninger ud fra dine ord. Det erstatter ikke kontakt til din diabetesklinik.</footer>
+  </div>
+
+  <script>
+    const CATS = { AKUT:'Akut', TEK:'Teknologi', LIV:'Rejse & hverdagsliv', FORE:'Screening & forebyggelse' };
+    const LINKS = [
+      {title:'Lavt blodsukker (hypoglykæmi)', url:'https://www.hospitalsenhedmidt.dk/patientvejledninger/medicinsk-diagnostisk-center/diabetes-og-lavt-blodsukker/', blurb:'Hvad gør du ved lavt blodsukker (15/15-regel), forebyggelse og glukagon.', cat:CATS.AKUT, keywords:['lavt blodsukker','hypo','føling','hypos','sved','rysten','svimmel','glukagon','15/15','kolde sved']},
+      {title:'Upload hjemmefra (CGM/pumpe)', url:'https://www.hospitalsenhedmidt.dk/patientvejledninger/medicinsk-diagnostisk-center/sadan-uploader-du-data-til-diabetesklinikken/', blurb:'Sådan uploader du data til klinikken trin-for-trin.', cat:CATS.TEK, keywords:['upload','uploader','data','diasend','libreview','clarity','pump','pumpe','cgm','sensor','opkobling','cloud']},
+      {title:'Pumpepas', url:'https://www.hospitalsenhedmidt.dk/patientvejledninger/medicinsk-diagnostisk-center/pumpepas-rhsi/', blurb:'Dit pumpepas – nyttigt ved rejser, hospital, sport m.m.', cat:CATS.TEK, keywords:['pumpepas','rejsebrev','security','lufthavn','hospital','akut','kort']},
+      {title:'Infiltrater & stikketeknik', url:'https://videncenterfordiabetes.dk/viden-om-diabetes/type-1-diabetes/behandling/insulin/injektion-af-insulin/forandringer-i-huden', blurb:'Undgå og håndtér tykkere hud og klumper (infiltrater); korrekt stik- og site-rotation.', cat:CATS.TEK, keywords:['infiltrat','klumper','hud','site','stik','stikketeknik','lipohypertrofi','rotation','adhesive','lim','irritation']},
+      {title:'Hudpleje ved pumpe/sensor (klæbere, irritation)', url:'https://www.auh.dk/patientvejledninger/steno-diabetes-center-aarhus/diabetes-og-teknologi/hudpleje-i-forbindelse-med-brug-af-insulinpumpe-og-sensor/', blurb:'Hudpleje, klæbere/plastre, forebyggelse af irritation/allergi og fjernelse af limrester.', cat:CATS.TEK, keywords:['hudpleje','klæber','plaster','lim','tape','allergi','irritation','rødme','kløe','sensor','pumpe','adhesive','barrierefilm']},
+      {title:'Sygdom/ketoner (sygeplan)', url:'https://www.hospitalsenhedmidt.dk/patientvejledninger/medicinsk-diagnostisk-center/sygdom-syreforgiftning-og-diabetes/', blurb:'Når du er syg: ketoner, væske, ekstra insulin og hvornår du skal kontakte klinikken.', cat:CATS.AKUT, keywords:['syg','sygdom','feber','keton','ketoner','opkast','kvalme','mave','infektion','væske','DKA','syre']},
+      {title:'Rejse med diabetes', url:'https://diabetes.dk/radgivning/stotte-og-rettigheder/rejse/', blurb:'Planlægning, medicin på rejsen, tidszoner, lufthavnssikkerhed.', cat:CATS.LIV, keywords:['rejse','ferie','fly','lufthavn','tidszone','varme','kulde','medicinbrev','sikkerhed']},
+      {title:'Fødder – pas godt på dem', url:'https://www.auh.dk/patientvejledninger/steno-diabetes-center-aarhus/diabetes-og-fodder/sadan-passer-du-godt-pa-dine-fodder-i-dagligdagen/', blurb:'Dagligt fodtjek, sko, tryk og hvornår du skal søge hjælp.', cat:CATS.FORE, keywords:['fod','fødder','sår','sko','tryk','revner','negle','perifer','neuropati']},
+      {title:'Øjne (screening)', url:'https://videncenterfordiabetes.dk/viden-om-diabetes/type-1-diabetes/foelgesygdomme/oejne', blurb:'Hvorfor øjenscreening er vigtig, og hvad du kan gøre i hverdagen.', cat:CATS.FORE, keywords:['øje','øjne','syn','slør','retino','fotograf','screening']},
+      {title:'Nyrer (albumin/eGFR)', url:'https://videncenterfordiabetes.dk/viden-om-diabetes/type-1-diabetes/foelgesygdomme/nyrer', blurb:'Hvad nyrerne betyder ved T1D, prøver og forebyggelse.', cat:CATS.FORE, keywords:['nyre','nyrer','albumin','eGFR','urin','skum','protein','ACE','ARB']},
+      {title:'Motion og diabetes', url:'https://diabetes.rm.dk/dine-muligheder/motion-og-diabetes/', blurb:'Sikker træning, hypos ved aktivitet og gode vaner.', cat:CATS.LIV, keywords:['motion','træning','sport','aktivitet','cykling','løb','svøm','vægt','fitness','hypo efter træning']},
+      {title:'Kolesterol (LDL)', url:'https://videncenterfordiabetes.dk/viden-om-diabetes/type-1-diabetes/behandling/kolesterol', blurb:'Hvorfor kolesterol har betydning ved T1D, og hvad du kan gøre.', cat:CATS.FORE, keywords:['kolesterol','ldl','statin','fedt','hjerte','åreforkalkning']},
+      {title:'Blodtryk', url:'https://videncenterfordiabetes.dk/viden-om-diabetes/type-1-diabetes/behandling/blodtryk', blurb:'Hjemmemålinger, mål og daglige råd for blodtryk.', cat:CATS.FORE, keywords:['blodtryk','bt','højt bt','hypertension','måling','hovedpine']}
+    ];
+
+    function activeCats(){
+      const on = new Set();
+      if(document.getElementById('catAkut').checked) on.add(CATS.AKUT);
+      if(document.getElementById('catTek').checked) on.add(CATS.TEK);
+      if(document.getElementById('catLiv').checked) on.add(CATS.LIV);
+      if(document.getElementById('catFore').checked) on.add(CATS.FORE);
+      return on;
+    }
+
+    function render(list){
+      const wrap = document.getElementById('results');
+      wrap.innerHTML='';
+      if(!list.length){
+        wrap.innerHTML = '<div class="muted">Ingen oplagte match endnu — prøv at skrive få nøgleord (fx “hypo efter træning”, “upload”, “hudpleje klæber”, “rejse”).</div>';
+        return;
+      }
+      list.forEach(({link,score,hits})=>{
+        const div = document.createElement('div');
+        div.className='result';
+        div.innerHTML = `
+          <h3>${link.title}</h3>
+          <p class="muted">${link.blurb}</p>
+          <div>
+            <span class="tag">${link.cat}</span>
+            <span class="tag">Relevans: ${score ?? ''}</span>
+          </div>
+          <p class="why">Begrundelse: <b>${(hits && hits.length ? hits.slice(0,4).join('</b>, <b>') : 'AI-match')}</b></p>
+          <a class="link" href="${link.url}" target="_blank" rel="noopener" aria-label="Åbn vejledning">Åbn vejledning →</a>
+        `;
+        wrap.appendChild(div);
+      });
+    }
+
+    function norm(s){ return (s||'').toLowerCase().replaceAll('æ','ae').replaceAll('ø','oe').replaceAll('å','aa'); }
+    function scoreHeu(q,l){
+      const t = norm(q).split(/[^a-z0-9+]+/).filter(Boolean);
+      const text = norm(l.title + ' ' + l.blurb);
+      let s = 0; t.forEach(tok => { if(text.includes(tok)) s++; });
+      return {score:s, hits:t.slice(0,3)};
+    }
+
+    async function aiSuggestServer(problem, activeCats){
+      const body = {
+        problem,
+        links: LINKS.filter(l => activeCats.has(l.cat)).map((l, idx) => ({ id: idx, title: l.title, blurb: l.blurb, url: l.url, cat: l.cat }))
+      };
+      const res = await fetch('/api/ai-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(!res.ok) throw new Error('AI endpoint fejl: ' + res.status);
+      const data = await res.json();
+      const results = (data.picks||[]).map((p,i) => {
+        const l = body.links.find(x => x.id === p.id);
+        return { link: l, score: 100-i, hits: [p.reason || 'AI-match'] };
+      });
+      return results;
+    }
+
+    function renderError(msg){
+      const box = document.getElementById('errorBox');
+      box.textContent = msg;
+      box.style.display = 'block';
+      setTimeout(()=>{ box.style.display='none'; }, 6000);
+    }
+
+    async function suggest(){
+      const q = document.getElementById('problem').value.trim();
+      const cats = activeCats();
+      try {
+        const ai = await aiSuggestServer(q, cats);
+        if(ai && ai.length){ render(ai.slice(0,6)); return; }
+      } catch (e){
+        renderError('AI kunne ikke kontaktes – viser forslag med lokal søgning.');
+      }
+      const set = LINKS.filter(l => cats.has(l.cat));
+      const ranked = set.map(l=>{const {score:s,hits}=scoreHeu(q,l);return {link:l,score:s,hits};}).sort((a,b)=>b.score - a.score).slice(0,6);
+      render(ranked);
+    }
+
+    const QUICK = ['hypo efter træning','upload fra pumpen','pumpepas til rejse','infiltrater på maven','sensor-klæber irriterer huden','jeg er syg og har ketoner','jeg skal ud at rejse','lav sårheling på fødder','sløret syn','skummende urin','blodtryk for højt'];
+    const chipsEl = document.getElementById('chips');
+    QUICK.forEach(q => { const b=document.createElement('button'); b.className='chip'; b.textContent=q; b.type='button'; b.onclick=()=>{ const t=document.getElementById('problem'); t.value=(t.value?t.value+' ':'')+q; b.classList.add('active'); }; chipsEl.appendChild(b); });
+    document.getElementById('suggestBtn').onclick = suggest;
+    let timer; document.getElementById('problem').addEventListener('input', ()=>{ clearTimeout(timer); timer=setTimeout(suggest, 180); });
+    ['catAkut','catTek','catLiv','catFore'].forEach(id => document.getElementById(id).addEventListener('change', suggest));
+    suggest();
+  </script>
+</body>
+</html>
